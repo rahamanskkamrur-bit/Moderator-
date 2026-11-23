@@ -416,6 +416,229 @@ class AutoModLoggerBot(commands.Bot):
             timestamp=discord.utils.utcnow(),
         )
         await send_log(m.guild, emb)
+            async def on_member_update(self, before: discord.Member, after: discord.Member):
+        ch = []
+        if before.nick != after.nick:
+            ch.append(f"🏷️ **Nick:** `{before.nick or before.name}` ➔ `{after.nick or after.name}`")
+        add_r = [r.mention for r in after.roles if r not in before.roles]
+        rem_r = [r.mention for r in before.roles if r not in after.roles]
+        if add_r:
+            ch.append(f"➕ **Roles Added:** {', '.join(add_r)}")
+        if rem_r:
+            ch.append(f"➖ **Roles Removed:** {', '.join(rem_r)}")
+        if before.timed_out_until != after.timed_out_until:
+            ch.append(f"🔇 **Timed Out Until:** <t:{int(after.timed_out_until.timestamp())}:R>" if after.timed_out_until else "🔓 **Timeout Cleared**")
+        if ch:
+            await send_log(after.guild, discord.Embed(title="👤 Member Updated", description=f"👤 **Member:** {after.mention} (`{after.id}`)\n" + "\n".join(ch), color=discord.Color.blurple(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_channel_create(self, c: discord.abc.GuildChannel):
+        actor, _ = await fetch_actor(c.guild, discord.AuditLogAction.channel_create, c.id)
+        await send_log(c.guild, discord.Embed(title="📁 Channel Created", description=f"📍 {c.mention} (`#{c.name}`)\n🛡️ **By:** {actor}", color=discord.Color.green(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_channel_delete(self, c: discord.abc.GuildChannel):
+        actor, _ = await fetch_actor(c.guild, discord.AuditLogAction.channel_delete, c.id)
+        await send_log(c.guild, discord.Embed(title="🗑️ Channel Deleted", description=f"📍 `#{c.name}` (`{c.id}`)\n🛡️ **By:** {actor}", color=discord.Color.red(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_channel_update(self, b: discord.abc.GuildChannel, a: discord.abc.GuildChannel):
+        ch = []
+        if b.name != a.name:
+            ch.append(f"✏️ **Name:** `#{b.name}` ➔ `#{a.name}`")
+        if getattr(b, "topic", None) != getattr(a, "topic", None):
+            ch.append(f"📝 **Topic:** `{(a.topic or 'None')[:200]}`")
+        if b.overwrites != a.overwrites:
+            ch.append("🔐 **Permissions Modified**")
+        if ch:
+            actor, _ = await fetch_actor(a.guild, discord.AuditLogAction.channel_update, a.id)
+            await send_log(a.guild, discord.Embed(title="⚙️ Channel Updated", description=f"📍 {a.mention}\n🛡️ **By:** {actor}\n" + "\n".join(ch), color=discord.Color.gold(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_role_create(self, r: discord.Role):
+        actor, _ = await fetch_actor(r.guild, discord.AuditLogAction.role_create, r.id)
+        await send_log(r.guild, discord.Embed(title="🎭 Role Created", description=f"🏷️ {r.mention} (`{r.name}`)\n🛡️ **By:** {actor}", color=discord.Color.green(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_role_delete(self, r: discord.Role):
+        actor, _ = await fetch_actor(r.guild, discord.AuditLogAction.role_delete, r.id)
+        await send_log(r.guild, discord.Embed(title="🗑️ Role Deleted", description=f"🏷️ `{r.name}` (`{r.id}`)\n🛡️ **By:** {actor}", color=discord.Color.red(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_role_update(self, b: discord.Role, a: discord.Role):
+        ch = []
+        if b.name != a.name:
+            ch.append(f"✏️ **Name:** `{b.name}` ➔ `{a.name}`")
+        if b.color != a.color:
+            ch.append(f"🎨 **Color:** `{b.color}` ➔ `{a.color}`")
+        if b.permissions != a.permissions:
+            ch.append("🔐 **Permissions Changed**")
+        if ch:
+            actor, _ = await fetch_actor(a.guild, discord.AuditLogAction.role_update, a.id)
+            await send_log(a.guild, discord.Embed(title="⚙️ Role Updated", description=f"🏷️ {a.mention}\n🛡️ **By:** {actor}\n" + "\n".join(ch), color=discord.Color.gold(), timestamp=discord.utils.utcnow()))
+
+    async def on_guild_update(self, b: discord.Guild, a: discord.Guild):
+        ch = []
+        if b.name != a.name:
+            ch.append(f"🏛️ **Name:** `{b.name}` ➔ `{a.name}`")
+        if b.icon != a.icon:
+            ch.append("🖼️ **Server Icon Changed**")
+        if b.verification_level != a.verification_level:
+            ch.append(f"🛡️ **Verification:** `{b.verification_level}` ➔ `{a.verification_level}`")
+        if ch:
+            actor, _ = await fetch_actor(a, discord.AuditLogAction.guild_update, a.id)
+            await send_log(a, discord.Embed(title="🏛️ Server Settings Updated", description=f"🛡️ **By:** {actor}\n" + "\n".join(ch), color=discord.Color.purple(), timestamp=discord.utils.utcnow()))
+
+    async def on_voice_state_update(self, m: discord.Member, b: discord.VoiceState, a: discord.VoiceState):
+        if m.bot or b.channel == a.channel:
+            return
+        txt = f"🔊 Joined {a.channel.mention}" if not b.channel else (f"🔇 Left {b.channel.mention}" if not a.channel else f"🔀 {b.channel.mention} ➔ {a.channel.mention}")
+        await send_log(m.guild, discord.Embed(title="🎙️ Voice Activity", description=f"👤 {m.mention} (`{m.id}`)\n{txt}", color=discord.Color.blurple(), timestamp=discord.utils.utcnow()))
+
+
+# =====================================================================
+# 5. SLASH COMMANDS (SETUP, FILTERS & HIGH-RANK MODERATION)
+# =====================================================================
+def reg_cmds(bot: AutoModLoggerBot):
+    @bot.tree.command(name="mod_setup", description="Configure Log Channel, Staff Role, Strike Limits & High-Rank Enforcement")
+    async def s_setup(i: discord.Interaction, log_channel: discord.TextChannel, staff_role: discord.Role, strikes_for_kick: int = 3, strikes_for_ban: int = 5, enforce_on_high_ranks: bool = True):
+        if not i.user.guild_permissions.administrator:
+            return await i.response.send_message("❌ Administrators only.", ephemeral=True)
+        cfg = get_cfg(i.guild.id)
+        cfg.update({"log_channel_id": log_channel.id, "staff_role_id": staff_role.id, "kick_strikes": max(1, strikes_for_kick), "ban_strikes": max(strikes_for_kick + 1, strikes_for_ban), "enforce_on_staff": enforce_on_high_ranks})
+        save_json(CFG_FILE, GUILD_CFG)
+        emb = discord.Embed(
+            title="✅ Auto-Moderator & Full Server Logger Ready!",
+            description=f"📜 **Log Channel:** {log_channel.mention}\n🛡️ **Staff Role:** {staff_role.mention}\n⚔️ **Enforce on High Ranks:** `{'YES' if enforce_on_high_ranks else 'NO'}`\n👢 **Auto-Kick:** `{cfg['kick_strikes']}` | 🔨 **Auto-Ban:** `{cfg['ban_strikes']}`\n\n📌 *Drag my Bot Role to **#1 Top** in Server Settings ➔ Roles!*",
+            color=discord.Color.green(),
+        )
+        await i.response.send_message(embed=emb, ephemeral=True)
+
+    @bot.tree.command(name="add_badword", description="Add a blocked word or link to Auto-Mod")
+    async def s_addw(i: discord.Interaction, word: str):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        cfg, w = get_cfg(i.guild.id), word.strip().lower()
+        if w not in cfg["bad_words"]:
+            cfg["bad_words"].append(w)
+            save_json(CFG_FILE, GUILD_CFG)
+        await i.response.send_message(f"✅ Added `{w}` to blocked words!", ephemeral=True)
+
+    @bot.tree.command(name="remove_badword", description="Remove a word from Auto-Mod")
+    async def s_remw(i: discord.Interaction, word: str):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        cfg, w = get_cfg(i.guild.id), word.strip().lower()
+        cfg["bad_words"] = [x for x in cfg["bad_words"] if x.lower() != w]
+        save_json(CFG_FILE, GUILD_CFG)
+        await i.response.send_message(f"🗑️ Removed `{w}` from blocked words.", ephemeral=True)
+
+    @bot.tree.command(name="warn", description="Warn a player (+1 Strike — Auto-Kicks/Bans at limit)")
+    async def s_warn(i: discord.Interaction, member: discord.Member, reason: str):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        cfg, st = get_cfg(i.guild.id), add_strike(i.guild.id, member.id, 1)
+        extra = ""
+        if member.id != i.guild.owner_id and member.top_role < i.guild.me.top_role:
+            if st >= cfg["ban_strikes"]:
+                await member.ban(reason=f"Reached {st} strikes: {reason}")
+                extra = "\n🔨 **Threshold Reached — Auto-Banned!**"
+            elif st >= cfg["kick_strikes"]:
+                await member.kick(reason=f"Reached {st} strikes: {reason}")
+                extra = "\n👢 **Threshold Reached — Auto-Kicked!**"
+        emb = discord.Embed(title="⚠️ Official Warning", description=f"👤 **Player:** {member.mention} (ID: `{member.id}`)\n🛡️ **Mod:** {i.user.mention}\n📌 **Reason:** {reason}\n📊 **Strikes:** `{st}/{cfg['ban_strikes']}`{extra}", color=discord.Color.gold())
+        await i.response.send_message(content=member.mention, embed=emb)
+        await send_log(i.guild, emb, ModActionView())
+
+    @bot.tree.command(name="warnings", description="Check a player's current strikes")
+    async def s_warns(i: discord.Interaction, member: discord.Member):
+        st, cfg = get_strikes(i.guild.id, member.id), get_cfg(i.guild.id)
+        await i.response.send_message(f"📊 {member.mention} has **`{st}`** strike(s). *(Kick at `{cfg['kick_strikes']}`, Ban at `{cfg['ban_strikes']}`)*", ephemeral=True)
+
+    @bot.tree.command(name="clear_warnings", description="Reset a player's strikes to 0")
+    async def s_clr(i: discord.Interaction, member: discord.Member):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        reset_strikes(i.guild.id, member.id)
+        await i.response.send_message(f"🔓 Cleared all strikes for {member.mention}.", ephemeral=True)
+
+    @bot.tree.command(name="kick", description="Kick any member (including higher ranks if Bot Role is #1 Top)")
+    async def s_kick(i: discord.Interaction, member: discord.Member, reason: str = "Rule violation"):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        if member.id == i.guild.owner_id:
+            return await i.response.send_message("❌ Discord's API permanently blocks all bots from kicking the Server Owner.", ephemeral=True)
+        if member.top_role >= i.guild.me.top_role:
+            return await i.response.send_message("❌ Drag my Bot Role above that member's highest role in **Server Settings ➔ Roles**!", ephemeral=True)
+        await member.kick(reason=f"{reason} (by {i.user})")
+        await i.response.send_message(f"👢 Kicked **{member}** (`{reason}`).")
+
+    @bot.tree.command(name="ban", description="Ban any member (including higher ranks if Bot Role is #1 Top)")
+    async def s_ban(i: discord.Interaction, member: discord.Member, reason: str = "Rule violation"):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        if member.id == i.guild.owner_id:
+            return await i.response.send_message("❌ Discord's API permanently blocks all bots from banning the Server Owner.", ephemeral=True)
+        if member.top_role >= i.guild.me.top_role:
+            return await i.response.send_message("❌ Drag my Bot Role above that member's highest role in **Server Settings ➔ Roles**!", ephemeral=True)
+        await member.ban(reason=f"{reason} (by {i.user})")
+        await i.response.send_message(f"🔨 Banned **{member}** (`{reason}`).")
+
+    @bot.tree.command(name="unban", description="Unban a player by Discord User ID")
+    async def s_unban(i: discord.Interaction, user_id: str, reason: str = "Appeal approved"):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        await i.guild.unban(discord.Object(id=int(user_id.strip())), reason=f"{reason} (by {i.user})")
+        await i.response.send_message(f"🔓 Unbanned User ID `{user_id}`.")
+
+    @bot.tree.command(name="purge", description="Delete 1-100 recent messages in this channel")
+    async def s_purge(i: discord.Interaction, amount: int):
+        if not is_staff(i.user):
+            return await i.response.send_message("❌ Staff only.", ephemeral=True)
+        await i.response.defer(ephemeral=True)
+        deleted = await i.channel.purge(limit=max(1, min(amount, 100)))
+        await i.followup.send(f"🧹 Deleted **{len(deleted)}** messages!", ephemeral=True)
+
+
+# =====================================================================
+# 6. MAIN ENTRYPOINT (RENDER 24/7 + 429 AUTO-RETRY)
+# =====================================================================
+async def main():
+    global BOT_STATUS
+    await run_web()
+    asyncio.create_task(self_ping())
+    if not BOT_TOKEN:
+        BOT_STATUS = "MISSING BOT_TOKEN"
+        print("❌ ERROR: Add BOT_TOKEN in Render Environment Variables!")
+        while True:
+            await asyncio.sleep(3600)
+
+    msg_i, mem_i, wait_s = True, True, 90
+    while True:
+        bot = AutoModLoggerBot(msg_i, mem_i)
+        reg_cmds(bot)
+        try:
+            await bot.start(BOT_TOKEN)
+            break
+        except discord.PrivilegedIntentsRequired:
+            print("⚠️ Enable Message Content & Server Members Intents in Developer Portal!")
+            await bot.close()
+            if mem_i:
+                mem_i = False
+            elif msg_i:
+                msg_i = False
+            else:
+                await asyncio.sleep(60)
+        except discord.HTTPException as e:
+            await bot.close()
+            if e.status == 429:
+                BOT_STATUS = f"429 Rate Limit - retrying in {wait_s}s"
+                await asyncio.sleep(wait_s)
+                wait_s = min(wait_s + 60, 300)
+            else:
+                await asyncio.sleep(60)
+        except Exception as e:
+            await bot.close()
+            BOT_STATUS = f"Reconnecting ({type(e).__name__})"
+            await asyncio.sleep(60)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
     async def on_member_ban(self, g: discord.Guild, u: discord.User):
         actor, reason = await fetch_actor(g, discord.AuditLogAction.ban, u.id)
